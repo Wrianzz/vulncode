@@ -2,96 +2,115 @@ pipeline {
     agent any
 
     environment {
+        // Public repo kamu
+        gitUrl = 'https://github.com/username/repo.git'
+
+        // DefectDojo
         DEFECTDOJO_API_KEY_ID = 'DEFECTDOJO_API_KEY_ID'
-
         DD_PRODUCT_NAME = 'my-product'
-        DD_ENGAGEMENT   = 'ci/cd'
-        SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
-        BRANCH_TAG      = 'main'
+        DD_ENGAGEMENT = 'ci/cd'
+        SOURCE_CODE_URL = 'https://github.com/username/repo.git'
+        BRANCH_TAG = 'main'
 
-        IMAGE_NAME = "my-app"
+        // Docker image name lokal
+        IMAGE_NAME_BASE = 'my-app'
+
+        // Email config (optional, hapus kalau nggak mau kirim email)
+        developersEmail = 'devteam@example.com'
+        bccEmail1 = 'bcc1@example.com'
+        bccEmail2 = 'bcc2@example.com'
     }
 
-    options {
-        timestamps()
+    parameters {
+        string(name: 'BRANCHNAME_PARAM', defaultValue: '', description: 'Branch name for manual build')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
                 script {
-                    if (env.GIT_BRANCH) {
-                        env.BRANCH_TAG = env.GIT_BRANCH.replaceAll('origin/', '')
+                    def isManual = params.BRANCHNAME_PARAM?.trim()
+                    if (isManual) {
+                        env.branch_name = params.BRANCHNAME_PARAM
+                    } else {
+                        env.branch_name = env.GIT_BRANCH?.replaceAll('origin/', '') ?: 'main'
+                    }
+
+                    cleanWs()
+                    git branch: env.branch_name, url: env.gitUrl
+
+                    // Image tag lokal
+                    env.imageTag = env.BUILD_NUMBER
+                }
+            }
+        }
+
+        stage('Test (Security)') {
+            parallel {
+                stage('Secrets Scan (TruffleHog)') {
+                    steps {
+                        script {
+                            def result = sh(script: """
+                                docker run --rm -v "\$(pwd)":/src -w /src trufflesecurity/trufflehog:latest \
+                                filesystem . > trufflehog-report.json || true
+                            """, returnStatus: true)
+                            archiveArtifacts artifacts: 'trufflehog-report.json', fingerprint: true
+                            if (env.branch_name in ['master', 'main'] && result != 0) {
+                                error "Secrets found in main branch!"
+                            }
+                        }
+                    }
+                }
+                stage('SCA (Grype)') {
+                    steps {
+                        script {
+                            sh """
+                                docker run --rm -v "\$(pwd)":/src -w /src anchore/grype:latest \
+                                dir:/src -o json > grype-report.json || true
+                            """
+                            archiveArtifacts artifacts: 'grype-report.json', fingerprint: true
+                        }
                     }
                 }
             }
         }
 
-        stage('Build (optional)') {
-            steps {
-                echo "Installing Python dependencies..."
-                sh 'pip install -r requirements.txt || true'
-            }
-        }
-
-        stage('TruffleHog (secrets scan)') {
+        stage('Build Image') {
             steps {
                 script {
-                    sh '''
-                    docker run --rm -v "$(pwd)":/src -w /src trufflesecurity/trufflehog:latest \
-                      filesystem --format json . > trufflehog-report.json || true
-                    '''
-                    archiveArtifacts artifacts: 'trufflehog-report.json', fingerprint: true
+                    sh "docker build --network=host -t ${IMAGE_NAME_BASE}:${env.imageTag} ."
                 }
             }
         }
 
-        stage('Build Docker image (for Trivy/Grype)') {
+        stage('Image Scan (Trivy)') {
             steps {
                 script {
-                    sh "docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} . || true"
-                }
-            }
-        }
-
-        stage('Trivy scan (image)') {
-            steps {
-                script {
-                    sh """
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
-                      image --format json --quiet --output trivy-report.json ${IMAGE_NAME}:${env.BUILD_NUMBER} || true
-                    """
+                    def trivyArgs = (env.branch_name in ['master', 'main']) ? '--severity HIGH,CRITICAL --exit-code 1' : ''
+                    def result = sh(script: """
+                        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+                        image ${trivyArgs} --format json ${IMAGE_NAME_BASE}:${env.imageTag} \
+                        > trivy-report.json || true
+                    """, returnStatus: true)
                     archiveArtifacts artifacts: 'trivy-report.json', fingerprint: true
+                    if (env.branch_name in ['master', 'main'] && result != 0) {
+                        error "Critical vulnerabilities found in main branch image!"
+                    }
                 }
             }
         }
 
-        stage('Grype scan (image)') {
-            steps {
-                script {
-                    sh """
-                    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock anchore/grype:latest \
-                      ${IMAGE_NAME}:${env.BUILD_NUMBER} -o json > grype-report.json || true
-                    """
-                    archiveArtifacts artifacts: 'grype-report.json', fingerprint: true
-                }
-            }
-        }
-
-        stage('Publish all scans to DefectDojo') {
+        stage('Publish to DefectDojo') {
             steps {
                 withCredentials([string(credentialsId: "${DEFECTDOJO_API_KEY_ID}", variable: 'DD_API_KEY')]) {
                     script {
                         def uploads = [
                             [file: 'trufflehog-report.json', scanType: 'TruffleHog Scan'],
-                            [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
-                            [file: 'grype-report.json',      scanType: 'Grype Scan']
+                            [file: 'grype-report.json',      scanType: 'Grype Scan'],
+                            [file: 'trivy-report.json',      scanType: 'Trivy Scan']
                         ]
-
                         uploads.each { u ->
                             if (fileExists(u.file)) {
-                                echo "Publishing ${u.file} => DefectDojo as ${u.scanType}"
                                 defectDojoPublisher(
                                     artifact: u.file,
                                     productName: "${DD_PRODUCT_NAME}",
@@ -102,7 +121,7 @@ pipeline {
                                     branchTag: "${BRANCH_TAG}"
                                 )
                             } else {
-                                echo "File not found, skip: ${u.file}"
+                                echo "Skip upload: ${u.file} not found."
                             }
                         }
                     }
@@ -113,7 +132,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline selesai. Semua artifacts sudah di-archive."
+            echo "Pipeline selesai."
         }
         failure {
             echo "Pipeline gagal."
