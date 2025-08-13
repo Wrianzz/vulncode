@@ -96,7 +96,7 @@ pipeline {
 
         stage('Publish to DefectDojo') {
             steps {
-                withCredentials([string(credentialsId: 'DEFECTDOJO_API_KEY_ID', variable: 'DD_API_KEY')]) {
+                withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
                     script {
                         def uploads = [
                             [file: 'trufflehog-report.json', scanType: 'TruffleHog Scan'],
