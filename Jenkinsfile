@@ -6,7 +6,7 @@ pipeline {
         gitUrl = 'https://github.com/Wrianzz/vulncode.git'
 
         // DefectDojo
-        DEFECTDOJO_API_KEY_ID = credentials('DEFECTDOJO_API_KEY_ID')
+        DEFECTDOJO_API_KEY_ID = 'DEFECTDOJO_API_KEY_ID'
         DD_PRODUCT_NAME = 'my-product'
         DD_ENGAGEMENT = 'ci/cd'
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
