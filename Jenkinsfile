@@ -98,7 +98,7 @@ pipeline {
             steps {
                     script {
                         def uploads = [
-                            [file: 'trufflehog-report.json', scanType: 'TruffleHog Scan'],
+                            [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
                             [file: 'grype-report.json',      scanType: 'Grype Scan'],
                             [file: 'trivy-report.json',      scanType: 'Trivy Scan']
                         ]
