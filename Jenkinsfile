@@ -3,22 +3,17 @@ pipeline {
 
     environment {
         // Public repo kamu
-        gitUrl = 'https://github.com/username/repo.git'
+        gitUrl = 'https://github.com/Wrianzz/vulncode.git'
 
         // DefectDojo
         DEFECTDOJO_API_KEY_ID = 'DEFECTDOJO_API_KEY_ID'
         DD_PRODUCT_NAME = 'my-product'
         DD_ENGAGEMENT = 'ci/cd'
-        SOURCE_CODE_URL = 'https://github.com/username/repo.git'
+        SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
         BRANCH_TAG = 'main'
 
         // Docker image name lokal
         IMAGE_NAME_BASE = 'my-app'
-
-        // Email config (optional, hapus kalau nggak mau kirim email)
-        developersEmail = 'devteam@example.com'
-        bccEmail1 = 'bcc1@example.com'
-        bccEmail2 = 'bcc2@example.com'
     }
 
     parameters {
