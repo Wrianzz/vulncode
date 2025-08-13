@@ -6,7 +6,6 @@ pipeline {
         gitUrl = 'https://github.com/Wrianzz/vulncode.git'
 
         // DefectDojo
-        DEFECTDOJO_API_KEY_ID = 'DEFECTDOJO_API_KEY_ID'
         DD_PRODUCT_NAME = 'my-product'
         DD_ENGAGEMENT = 'ci/cd'
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
@@ -97,7 +96,7 @@ pipeline {
 
         stage('Publish to DefectDojo') {
             steps {
-                withCredentials([string(credentialsId: "${DEFECTDOJO_API_KEY_ID}", variable: 'DD_API_KEY')]) {
+                withCredentials([string(credentialsId: 'DEFECTDOJO_API_KEY_ID', variable: 'DD_API_KEY')]) {
                     script {
                         def uploads = [
                             [file: 'trufflehog-report.json', scanType: 'TruffleHog Scan'],
