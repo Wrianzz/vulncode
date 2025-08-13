@@ -99,7 +99,7 @@ pipeline {
                     script {
                         def uploads = [
                             [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
-                            [file: 'grype-report.json',      scanType: 'Grype Scan'],
+                            [file: 'grype-report.json',      scanType: 'Anchore Grype'],
                             [file: 'trivy-report.json',      scanType: 'Trivy Scan']
                         ]
                         uploads.each { u ->
