@@ -96,7 +96,6 @@ pipeline {
 
         stage('Publish to DefectDojo') {
             steps {
-                withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
                     script {
                         def uploads = [
                             [file: 'trufflehog-report.json', scanType: 'TruffleHog Scan'],
@@ -110,13 +109,12 @@ pipeline {
                                     productName: "${DD_PRODUCT_NAME}",
                                     scanType: "${u.scanType}",
                                     engagementName: "${DD_ENGAGEMENT}",
-                                    defectDojoCredentialsId: DD_API_KEY,
+                                    defectDojoCredentialsId: 'defectdojo-api-key',
                                     sourceCodeUrl: "${SOURCE_CODE_URL}",
                                     branchTag: "${BRANCH_TAG}"
                                 )
                             } else {
                                 echo "Skip upload: ${u.file} not found."
-                            }
                         }
                     }
                 }
