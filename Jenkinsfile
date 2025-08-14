@@ -149,17 +149,12 @@ pipeline {
                             echo "Task Status: ${taskStatus}"
                             echo "SonarQube Analysis ID: ${env.analysisId}"
         
-                            // Ambil detail issue dari analysis ID
-                            if (env.analysisId) {
-                                sh """
-                                    curl -s -u "${SONAR_TOKEN}:" \
-                                        "${SONAR_HOST_URL}/api/issues/search?analysisId=${env.analysisId}" \
-                                        -o sonarqube-scan-report.json
-                                """
-                                archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
-                            } else {
-                                echo "Tidak ada Analysis ID yang valid, skip download report."
-                            }
+                            sh """
+                                curl -s -u "${SONAR_TOKEN}:" \
+                                "${SONAR_HOST_URL}/api/hotspots/search?project=${SONAR_PROJECT_KEY}" \
+                                -o sonarqube-scan-report.json
+                               """
+                             archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
                         }
                     }
                 }
