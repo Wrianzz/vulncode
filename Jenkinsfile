@@ -171,7 +171,7 @@ pipeline {
             steps {
                 script {
                     def uploads = [
-                        [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
+                        //[file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
                         [file: 'grype-report.json',      scanType: 'Anchore Grype'],
                         [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
                         [file: 'sonarqube-detailed-scan-report.json', scanType: 'SonarQube Scan']
