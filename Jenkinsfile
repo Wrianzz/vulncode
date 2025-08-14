@@ -8,7 +8,6 @@ pipeline {
         // DefectDojo
         DD_PRODUCT_NAME = 'my-product'
         DD_ENGAGEMENT = 'ci/cd'
-        ENGAGEMENT_ID = 1
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
         BRANCH_TAG = 'main'
 
@@ -19,7 +18,6 @@ pipeline {
         SONAR_PROJECT_KEY = 'vulnerable-code'
         SONAR_HOST_URL = 'http://192.168.88.20:9000'
         SONAR_SCANNER = tool 'sonarqube'
-        DD_URL = 'http://192.168.88.20:8280'
     }
 
     parameters {
@@ -175,18 +173,16 @@ pipeline {
                    
                     uploads.each { u ->
                         if (fileExists(u.file)) {
-                            withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
-                                sh """
-                                    curl -X POST "${DD_URL}/api/v2/import-scan/" \
-                                     -H "Authorization: Token ${DD_API_KEY}" \
-                                     -F "engagement=${ENGAGEMENT_ID}" \
-                                     -F "scan_type=${u.scanType}" \
-                                     -F "file=@${u.file}" \
-                                     -F "do_not_reactivate=false" \
-                                     -F "close_old_findings=true" \
-                                     -F "deduplication_on_engagements=true"
-                                """
-                            }
+                            defectDojoPublisher(
+                                artifact: u.file,
+                                productName: "${DD_PRODUCT_NAME}",
+                                scanType: "${u.scanType}",
+                                engagementName: "${DD_ENGAGEMENT}",
+                                defectDojoCredentialsId: 'defectdojo-api-key',
+                                sourceCodeUrl: "${SOURCE_CODE_URL}",
+                                branchTag: "${BRANCH_TAG}",
+                                reactivate: true
+                            )
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
                         }
