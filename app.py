@@ -1,81 +1,83 @@
 from flask import Flask, request, jsonify
-import sqlite3
-import subprocess
 import os
+import sqlite3
 
 app = Flask(__name__)
 
-OPENAI_API_KEY = "sk-demo-l4gS3cr3tKey-1234567890"
+GROQ_API_KEY = "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"
 
-DATABASE = "data.db"
-
+DB_PATH = 'users.db'
 def init_db():
-    conn = sqlite3.connect(DATABASE)
+    first_time = not os.path.exists(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
+    # Buat tabel jika belum ada
     cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL
-        )
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL
+    );
     ''')
     conn.commit()
-    cur.execute("INSERT OR IGNORE INTO users (username, password) VALUES ('admin', 'adminpass');")
-    conn.commit()
+    if first_time:
+        cur.execute("INSERT INTO users (username, password) VALUES ('admin', 'password123');")
+        conn.commit()
     conn.close()
-
 init_db()
 
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 @app.route("/")
-def home():
-    return "Vulnerable Flask App — Training Only!"
+def index():
+    return "Hello from SATNUSA vulnerable app!"
 
 @app.route("/login", methods=["POST"])
 def login():
     username = request.form.get("username", "")
     password = request.form.get("password", "")
-    
-    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
-    
-    conn = sqlite3.connect(DATABASE)
+
+    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}';"
+    conn = get_db_connection()
     cur = conn.cursor()
     try:
         cur.execute(query)
         user = cur.fetchone()
     except Exception as e:
-        return jsonify({"error": "Query failed", "detail": str(e)}), 500
-    conn.close()
-    
-    if user:
-        return jsonify({"message": f"Welcome {username}!"})
-    return jsonify({"message": "Invalid credentials"}), 401
+        conn.close()
+        return jsonify({"error": "Database error", "detail": str(e)}), 500
 
-@app.route("/run", methods=["GET"])
-def run_cmd():
+    conn.close()
+    if user:
+        return jsonify({"message": f"Welcome, {user['username']}!"})
+    else:
+        return jsonify({"message": "Invalid credentials"}), 401
+
+@app.route("/exec")
+def exec_cmd():
+    """
+    Contoh eksploit:
+      /exec?cmd=ls
+      /exec?cmd=ls%20-la
+      /exec?cmd=cat%20users.db
+      /exec?cmd=rm%20temp.txt
+    """
     cmd = request.args.get("cmd", "")
     if not cmd:
-        return jsonify({"error": "No command provided"}), 400
+        return jsonify({"error": "No cmd provided"}), 400
     try:
-        result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, text=True)
+        result = os.popen(cmd).read()
     except Exception as e:
-        return jsonify({"error": "Command failed", "detail": str(e)})
+        return jsonify({"error": "Execution error", "detail": str(e)}), 500
     return f"<pre>{result}</pre>"
 
-@app.route("/eval", methods=["POST"])
-def eval_code():
-    code = request.form.get("code", "")
-    try:
-        result = eval(code)
-        return jsonify({"result": result})
-    except Exception as e:
-        return jsonify({"error": "Eval failed", "detail": str(e)})
-
-@app.route("/secrets")
-def leak_secret():
-    return jsonify({
-        "OPENAI_API_KEY": OPENAI_API_KEY,
-        "db_path": DATABASE
-    })
+@app.route("/show_key")
+def show_key():
+    return jsonify({"GROQ_API_KEY": GROQ_API_KEY})
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
