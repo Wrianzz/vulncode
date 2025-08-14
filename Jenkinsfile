@@ -8,6 +8,7 @@ pipeline {
         // DefectDojo
         DD_PRODUCT_NAME = 'my-product'
         DD_ENGAGEMENT = 'ci/cd'
+        ENGAGEMENT_ID = 1
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
         BRANCH_TAG = 'main'
 
@@ -18,6 +19,7 @@ pipeline {
         SONAR_PROJECT_KEY = 'vulnerable-code'
         SONAR_HOST_URL = 'http://192.168.88.20:9000'
         SONAR_SCANNER = tool 'sonarqube'
+        DD_URL = 'http://192.168.88.20:8280'
     }
 
     parameters {
