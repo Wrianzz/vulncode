@@ -200,14 +200,14 @@ pipeline {
                 }
             }
         }
+    }
 
-        post {
-            always {
-                echo "Pipeline selesai."
-            }
-            failure {
-                echo "Pipeline gagal."
-            }
-        }
+    post {
+         always {
+            echo "Pipeline selesai."
+          }
+        failure {
+             echo "Pipeline gagal."
+       }
     }
 }
