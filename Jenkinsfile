@@ -183,7 +183,8 @@ pipeline {
                                      -F "scan_type=${u.scanType}" \
                                      -F "file=@${u.file}" \
                                      -F "do_not_reactivate=false" \
-                                     -F "close_old_findings=true"
+                                     -F "close_old_findings=true" \
+                                     -F "deduplication_on_engagements=true"
                                 """
                             }
                         } else {
