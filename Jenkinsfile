@@ -180,7 +180,8 @@ pipeline {
                                 engagementName: "${DD_ENGAGEMENT}",
                                 defectDojoCredentialsId: 'defectdojo-api-key',
                                 sourceCodeUrl: "${SOURCE_CODE_URL}",
-                                branchTag: "${BRANCH_TAG}"
+                                branchTag: "${BRANCH_TAG}",
+                                reactivate: true
                             )
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
