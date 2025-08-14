@@ -178,35 +178,36 @@ pipeline {
                         [file: 'sonarqube-detailed-scan-report.json', scanType: 'SonarQube Scan']
                     ]
                    
-                uploads.each { u ->
-                    def fileExistsFlag = fileExists(u.file)
-                    def fileNotEmpty = (sh(script: "test -s ${u.file}", returnStatus: true) == 0)
+                    uploads.each { u ->
+                        def fileExistsFlag = fileExists(u.file)
+                        def fileNotEmpty = (sh(script: "test -s ${u.file}", returnStatus: true) == 0)
 
-                    if (fileExistsFlag && fileNotEmpty) {
-                        echo "Uploading ${u.file} to DefectDojo..."
-                        defectDojoPublisher(
-                            artifact: u.file,
-                            productName: "${DD_PRODUCT_NAME}",
-                            scanType: "${u.scanType}",
-                            engagementName: "${DD_ENGAGEMENT}",
-                            defectDojoCredentialsId: 'defectdojo-api-key',
-                            sourceCodeUrl: "${SOURCE_CODE_URL}",
-                            branchTag: "${BRANCH_TAG}"
-                        )
-                    } else {
-                        echo "Skip upload: ${u.file} tidak ada atau kosong."
+                        if (fileExistsFlag && fileNotEmpty) {
+                            echo "Uploading ${u.file} to DefectDojo..."
+                            defectDojoPublisher(
+                                artifact: u.file,
+                                productName: "${DD_PRODUCT_NAME}",
+                                scanType: "${u.scanType}",
+                                engagementName: "${DD_ENGAGEMENT}",
+                                defectDojoCredentialsId: 'defectdojo-api-key',
+                                sourceCodeUrl: "${SOURCE_CODE_URL}",
+                                branchTag: "${BRANCH_TAG}"
+                            )
+                        } else {
+                            echo "Skip upload: ${u.file} tidak ada atau kosong."
+                        }
                     }
                 }
             }
         }
-    }
 
-    post {
-        always {
-            echo "Pipeline selesai."
-        }
-        failure {
-            echo "Pipeline gagal."
+        post {
+            always {
+                echo "Pipeline selesai."
+            }
+            failure {
+                echo "Pipeline gagal."
+            }
         }
     }
 }
