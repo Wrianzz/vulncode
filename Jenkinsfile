@@ -49,8 +49,7 @@ pipeline {
                         script {
                             def result = sh(script: """
                                 docker run --rm -v "\$(pwd)":/src -w /src trufflesecurity/trufflehog:latest \
-                                filesystem . > trufflehog-report.json || true
-                            """, returnStatus: true)
+                                filesystem . > trufflehog-report.json)
                             archiveArtifacts artifacts: 'trufflehog-report.json', fingerprint: true
                             if (env.branch_name in ['master', 'main'] && result != 0) {
                                 error "Secrets found in main branch!"
