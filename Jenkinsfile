@@ -112,8 +112,8 @@ pipeline {
         stage('ZAP DAST Scan') {
             steps {
                 script {
-                    def zapHost = 'http://192.168.13.162:9091' // ganti alamat ZAP server kamu
-                    def target = 'http://localhost:8002'
+                    def zapHost = 'http://192.168.13.162:9091'
+                    def target = 'http://docker:8002'
 
                     // Mulai scan
                     def scanId = sh(
