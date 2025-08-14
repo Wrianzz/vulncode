@@ -183,6 +183,7 @@ pipeline {
                                      -F "do_not_reactivate=false" \
                                      -F "close_old_findings=true"
                                 """
+                            }
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
                         }
