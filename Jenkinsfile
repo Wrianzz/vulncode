@@ -94,13 +94,70 @@ pipeline {
             }
         }
 
+        stage('Run Flask App Container') {
+            steps {
+                script {
+                    // Stop and remove if already running
+                    sh 'docker rm -f ${IMAGE_NAME_BASE}:${env.imageTag} || true'
+
+                    // Run container
+                    sh 'docker run -d --name vuln-flask-app -p 8002:8002 ${IMAGE_NAME_BASE}:${env.imageTag}'
+
+                    // Tunggu app siap
+                    sleep(5)
+                }
+            }
+        }
+
+        stage('ZAP DAST Scan') {
+            steps {
+                script {
+                    def zapHost = 'http://192.168.13.162:9091' // ganti alamat ZAP server kamu
+                    def target = 'http://localhost:8002'
+
+                    // Mulai scan
+                    def scanId = sh(
+                        script: """
+                            curl -s "${zapHost}/JSON/ascan/action/scan/?url=${target}" \
+                            | jq -r '.scan'
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    echo "ZAP scan started: ${scanId}"
+
+                    // Polling progress
+                    def status = "0"
+                    while (status != "100") {
+                        status = sh(
+                            script: """
+                                curl -s "${zapHost}/JSON/ascan/view/status/?scanId=${scanId}" \
+                                | jq -r '.status'
+                            """,
+                            returnStdout: true
+                            ).trim()
+                        echo "Progress: ${status}%"
+                        sleep(5)
+                    }
+
+                    // Ambil report JSON
+                    sh """
+                        curl -s "${zapHost}/OTHER/core/other/jsonreport/" \
+                        -o zap-report.json
+                    """
+                    archiveArtifacts artifacts: 'zap-report.json', fingerprint: true
+                }
+            }
+        }
+
         stage('Publish to DefectDojo') {
             steps {
                     script {
                         def uploads = [
                             [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
                             [file: 'grype-report.json',      scanType: 'Anchore Grype'],
-                            [file: 'trivy-report.json',      scanType: 'Trivy Scan']
+                            [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
+                            [file: 'zap-report.json',        scanType: 'ZAP Scan']
                         ]
                         uploads.each { u ->
                             if (fileExists(u.file)) {
