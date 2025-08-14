@@ -15,7 +15,7 @@ pipeline {
         IMAGE_NAME_BASE = 'my-app'
 
         // SonarQube
-        SONAR_PROJECT_KEY = 'vulncode'
+        SONAR_PROJECT_KEY = 'vulnerable-code'
         SONAR_HOST_URL = 'http://192.168.88.20:9000'
         SONAR_SCANNER = tool 'sonarqube'
     }
@@ -56,6 +56,7 @@ pipeline {
                             } else {
                                 echo "Secret scanning selesai. ${env.branch_name in ['master', 'main'] ? 'Blocking on any secret (bypassed).' : 'Continuing despite findings.'}"
                             }
+                            archiveArtifacts artifacts: 'trufflehog-report.json', fingerprint: true
                         }
                     }
                 }
@@ -107,14 +108,13 @@ pipeline {
                                 ${SONAR_SCANNER}/bin/sonar-scanner \
                                     -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                     -Dsonar.sources=. \
-                                    -Dsonar.host.url=${SONAR_HOST_URL} \
                                     -Dsonar.token=$SONAR_TOKEN \
-                                | tee sonar_out.txt
+                                | tee sonarqube_out.txt
                                 """
 
                             // Ambil taskId yang pertama muncul
                             env.sonarTaskID = sh(
-                                script: "grep -o 'id=[a-f0-9-]\\+' sonar_out.txt | cut -d= -f2",
+                                script: "grep -o 'id=[a-f0-9-]\\+' sonarqube_out.txt | cut -d= -f2",
                                 returnStdout: true
                             ).trim()
                             echo "SonarQube Task ID: ${env.sonarTaskID}"
@@ -154,9 +154,9 @@ pipeline {
                                 sh """
                                     curl -s -u "${SONAR_TOKEN}:" \
                                         "${SONAR_HOST_URL}/api/issues/search?analysisId=${env.analysisId}" \
-                                        -o sonarqube-detailed-scan-report.json
+                                        -o sonarqube-scan-report.json
                                 """
-                                archiveArtifacts artifacts: 'sonarqube-detailed-scan-report.json', fingerprint: true
+                                archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
                             } else {
                                 echo "Tidak ada Analysis ID yang valid, skip download report."
                             }
@@ -173,7 +173,7 @@ pipeline {
                         [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
                         [file: 'grype-report.json',      scanType: 'Anchore Grype'],
                         [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
-                        [file: 'sonarqube-detailed-scan-report.json', scanType: 'SonarQube Scan']
+                        [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
                     ]
                    
                     uploads.each { u ->
