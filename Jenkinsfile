@@ -158,10 +158,10 @@ pipeline {
                             sh """
                                 curl -s -u "${SONAR_TOKEN}:" \
                                     "${SONAR_HOST_URL}/api/issues/search?analysisId=${env.analysisId}" \
-                                    -o sonar-report.json
+                                    -o sonarqube-detailed-scan-report.json
                             """
 
-                            archiveArtifacts artifacts: 'sonar-report.json', fingerprint: true
+                            archiveArtifacts artifacts: 'sonarqube-detailed-scan-report.json', fingerprint: true
                         }
                     }
                 }
@@ -175,7 +175,7 @@ pipeline {
                         [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
                         [file: 'grype-report.json',      scanType: 'Anchore Grype'],
                         [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
-                        [file: 'sonar-report.json', scanType: 'SonarQube Scan']
+                        [file: 'sonarqube-detailed-scan-report.json', scanType: 'SonarQube Scan']
                     ]
                     uploads.each { u ->
                         if (fileExists(u.file)) {
