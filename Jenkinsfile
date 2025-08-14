@@ -98,10 +98,10 @@ pipeline {
             steps {
                 script {
                     // Stop and remove if already running
-                    sh 'docker rm -f ${IMAGE_NAME_BASE}:${env.imageTag} || true'
+                    sh "docker rm -f ${IMAGE_NAME_BASE}:${env.imageTag} || true"
 
                     // Run container
-                    sh 'docker run -d --name vuln-flask-app -p 8002:8002 ${IMAGE_NAME_BASE}:${env.imageTag}'
+                    sh "docker run -d --name vuln-flask-app -p 8002:8002 ${IMAGE_NAME_BASE}:${env.imageTag}"
 
                     // Tunggu app siap
                     sleep(5)
