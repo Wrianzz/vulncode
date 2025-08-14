@@ -103,21 +103,18 @@ pipeline {
                 withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv("${env.SONAR_ENV}") {
                         script {
-                            def sonarBranch = "${env.branch_name}-${env.BUILD_NUMBER}"
-
                             sh """
                                 ${SONAR_SCANNER}/bin/sonar-scanner \
                                     -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                     -Dsonar.sources=. \
                                     -Dsonar.host.url=${SONAR_HOST_URL} \
                                     -Dsonar.token=$SONAR_TOKEN \
-                                    -Dsonar.branch.name=${sonarBranch} \
-                                | tee sonarqube_output.txt
+                                | tee sonar_out.txt
                                 """
 
                             // Ambil taskId yang pertama muncul
                             env.sonarTaskID = sh(
-                                script: """grep -m1 -o 'ceTaskId=[a-f0-9-]\\+' sonarqube_output.txt | cut -d= -f2""",
+                                script: "grep -o 'id=[a-f0-9-]\\+' sonar_out.txt | cut -d= -f2",
                                 returnStdout: true
                             ).trim()
                             echo "SonarQube Task ID: ${env.sonarTaskID}"
