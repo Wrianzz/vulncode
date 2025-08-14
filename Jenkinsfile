@@ -13,6 +13,11 @@ pipeline {
 
         // Docker image name lokal
         IMAGE_NAME_BASE = 'my-app'
+
+        // SonarQube
+        SONAR_PROJECT_KEY = 'vulncode'
+        SONAR_HOST_URL = 'http://192.168.88.20:9000'
+        SONAR_SCANNER = tool 'sonarqube'
     }
 
     parameters {
@@ -32,8 +37,6 @@ pipeline {
 
                     cleanWs()
                     git branch: env.branch_name, url: env.gitUrl
-
-                    // Image tag lokal
                     env.imageTag = env.BUILD_NUMBER
                 }
             }
@@ -94,28 +97,99 @@ pipeline {
             }
         }
 
+        stage('SAST (SonarQube)') {
+            steps {
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv("${env.SONAR_ENV}") {
+                        script {
+                            sh """
+                                ${SONAR_SCANNER}/bin/sonar-scanner \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                                    -Dsonar.token=$SONAR_TOKEN \
+                                | tee sonarqube_output.txt
+                            """
+
+                            env.sonarTaskID = sh(
+                                script: "grep -o 'id=[a-f0-9-]\\+' sonarqube_output.txt | cut -d= -f2",
+                                returnStdout: true
+                            ).trim()
+                            echo "SonarQube Task ID: ${env.sonarTaskID}"
+
+                            int maxRetries = 60
+                            int retryCount = 0
+                            def qualityGateResult = null
+
+                            while (retryCount < maxRetries) {
+                                try {
+                                    timeout(time: 5, unit: 'SECONDS') {
+                                        qualityGateResult = waitForQualityGate abortPipeline: false, credentialsId: env.SONAR_TOKEN
+                                    }
+                                } catch (err) {
+                                    echo "Timeout pada attempt ${retryCount+1} saat memanggil waitForQualityGate. Mencoba lagi..."
+                                    qualityGateResult = [status: 'IN_PROGRESS']
+                                }
+
+                                echo "Attempt ${retryCount+1}: SonarQube Quality Gate status = ${qualityGateResult.status}"
+                                if (qualityGateResult.status != 'IN_PROGRESS' && qualityGateResult.status != 'PENDING') {
+                                    break
+                                }
+                                retryCount++
+                            }
+
+                            if (qualityGateResult.status == 'IN_PROGRESS' || qualityGateResult.status == 'PENDING') {
+                                echo "Quality Gate check timed out after ${maxRetries} retries. Please verify the SonarQube server for details."
+                            }
+                            if (qualityGateResult.status == 'ERROR') {
+                                echo "SonarQube Quality Gate gagal dengan status: ${qualityGateResult.status}. Pipeline bypassed."
+                            }
+
+                            env.analysisId = sh(
+                                script: """
+                                    curl -s -u "${SONAR_TOKEN}:" \
+                                        "${SONAR_HOST_URL}/api/ce/task?id=${env.sonarTaskID}" \
+                                        | jq -r '.task.analysisId'
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            echo "SonarQube Analysis ID: ${env.analysisId}"
+
+                            sh """
+                                curl -s -u "${SONAR_TOKEN}:" \
+                                    "${SONAR_HOST_URL}/api/issues/search?analysisId=${env.analysisId}" \
+                                    -o sonar-report.json
+                            """
+
+                            archiveArtifacts artifacts: 'sonar-report.json', fingerprint: true
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Publish to DefectDojo') {
             steps {
-                    script {
-                        def uploads = [
-                            [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
-                            [file: 'grype-report.json',      scanType: 'Anchore Grype'],
-                            [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
-                            //[file: 'zap-report.json',        scanType: 'ZAP Scan']
-                        ]
-                        uploads.each { u ->
-                            if (fileExists(u.file)) {
-                                defectDojoPublisher(
-                                    artifact: u.file,
-                                    productName: "${DD_PRODUCT_NAME}",
-                                    scanType: "${u.scanType}",
-                                    engagementName: "${DD_ENGAGEMENT}",
-                                    defectDojoCredentialsId: 'defectdojo-api-key',
-                                    sourceCodeUrl: "${SOURCE_CODE_URL}",
-                                    branchTag: "${BRANCH_TAG}"
-                                )
-                            } else {
-                                echo "Skip upload: ${u.file} not found."
+                script {
+                    def uploads = [
+                        [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
+                        [file: 'grype-report.json',      scanType: 'Anchore Grype'],
+                        [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
+                        [file: 'sonar-report.json', scanType: 'SonarQube Scan']
+                    ]
+                    uploads.each { u ->
+                        if (fileExists(u.file)) {
+                            defectDojoPublisher(
+                                artifact: u.file,
+                                productName: "${DD_PRODUCT_NAME}",
+                                scanType: "${u.scanType}",
+                                engagementName: "${DD_ENGAGEMENT}",
+                                defectDojoCredentialsId: 'defectdojo-api-key',
+                                sourceCodeUrl: "${SOURCE_CODE_URL}",
+                                branchTag: "${BRANCH_TAG}"
+                            )
+                        } else {
+                            echo "Skip upload: ${u.file} not found."
                         }
                     }
                 }
