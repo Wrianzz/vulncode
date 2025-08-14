@@ -173,16 +173,16 @@ pipeline {
                    
                     uploads.each { u ->
                         if (fileExists(u.file)) {
-                            defectDojoPublisher(
-                                artifact: u.file,
-                                productName: "${DD_PRODUCT_NAME}",
-                                scanType: "${u.scanType}",
-                                engagementName: "${DD_ENGAGEMENT}",
-                                defectDojoCredentialsId: 'defectdojo-api-key',
-                                sourceCodeUrl: "${SOURCE_CODE_URL}",
-                                branchTag: "${BRANCH_TAG}",
-                                reactivate: true
-                            )
+                            withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
+                                sh """
+                                    curl -X POST "${DD_URL}/api/v2/import-scan/" \
+                                     -H "Authorization: Token ${DD_API_KEY}" \
+                                     -F "engagement=${ENGAGEMENT_ID}" \
+                                     -F "scan_type=${u.scanType}" \
+                                     -F "file=@${u.file}" \
+                                     -F "do_not_reactivate=false" \
+                                     -F "close_old_findings=true"
+                                """
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
                         }
