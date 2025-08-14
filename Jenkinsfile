@@ -179,11 +179,7 @@ pipeline {
                     ]
                    
                     uploads.each { u ->
-                        def fileExistsFlag = fileExists(u.file)
-                        def fileNotEmpty = (sh(script: "test -s ${u.file}", returnStatus: true) == 0)
-
-                        if (fileExistsFlag && fileNotEmpty) {
-                            echo "Uploading ${u.file} to DefectDojo..."
+                        if (fileExists(u.file)) {
                             defectDojoPublisher(
                                 artifact: u.file,
                                 productName: "${DD_PRODUCT_NAME}",
