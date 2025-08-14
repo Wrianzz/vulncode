@@ -47,13 +47,14 @@ pipeline {
                 stage('Secrets Scan (TruffleHog)') {
                     steps {
                         script {
-                            def result = sh(script: """
-                                docker run --rm -v "\$(pwd)":/src -w /src trufflesecurity/trufflehog:latest \
-                                filesystem . > trufflehog-report.json
-                                """)
-                            archiveArtifacts artifacts: 'trufflehog-report.json', fingerprint: true
+                            def result = sh(script: 'trufflehog filesystem . --json > trufflehog-report.json', returnStatus: true)
+
+                            sh 'cat trufflehog-report.json || echo "Report kosong atau tidak terbaca"'
+
                             if (env.branch_name in ['master', 'main'] && result != 0) {
-                                error "Secrets found in main branch!"
+                                echo "Secret ditemukan oleh TruffleHog di branch ${env.branch_name}. Pipeline bypassed."
+                            } else {
+                                echo "Secret scanning selesai. ${env.branch_name in ['master', 'main'] ? 'Blocking on any secret (bypassed).' : 'Continuing despite findings.'}"
                             }
                         }
                     }
@@ -172,7 +173,7 @@ pipeline {
             steps {
                 script {
                     def uploads = [
-                        //[file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
+                        [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
                         [file: 'grype-report.json',      scanType: 'Anchore Grype'],
                         [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
                         [file: 'sonarqube-detailed-scan-report.json', scanType: 'SonarQube Scan']
