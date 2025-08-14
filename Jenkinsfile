@@ -103,66 +103,66 @@ pipeline {
                 withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv("${env.SONAR_ENV}") {
                         script {
+                            def sonarBranch = "${env.branch_name}-${env.BUILD_NUMBER}"
+
                             sh """
                                 ${SONAR_SCANNER}/bin/sonar-scanner \
                                     -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                     -Dsonar.sources=. \
                                     -Dsonar.host.url=${SONAR_HOST_URL} \
                                     -Dsonar.token=$SONAR_TOKEN \
+                                    -Dsonar.branch.name=${sonarBranch} \
                                 | tee sonarqube_output.txt
-                            """
+                                """
 
+                            // Ambil taskId yang pertama muncul
                             env.sonarTaskID = sh(
-                                script: "grep -o 'id=[a-f0-9-]\\+' sonarqube_output.txt | cut -d= -f2",
+                                script: """grep -m1 -o 'ceTaskId=[a-f0-9-]\\+' sonarqube_output.txt | cut -d= -f2""",
                                 returnStdout: true
                             ).trim()
                             echo "SonarQube Task ID: ${env.sonarTaskID}"
-
-                            int maxRetries = 60
-                            int retryCount = 0
-                            def qualityGateResult = null
-
-                            while (retryCount < maxRetries) {
-                                try {
-                                    timeout(time: 5, unit: 'SECONDS') {
-                                        qualityGateResult = waitForQualityGate abortPipeline: false, credentialsId: env.SONAR_TOKEN
-                                    }
-                                } catch (err) {
-                                    echo "Timeout pada attempt ${retryCount+1} saat memanggil waitForQualityGate. Mencoba lagi..."
-                                    qualityGateResult = [status: 'IN_PROGRESS']
-                                }
-
-                                echo "Attempt ${retryCount+1}: SonarQube Quality Gate status = ${qualityGateResult.status}"
-                                if (qualityGateResult.status != 'IN_PROGRESS' && qualityGateResult.status != 'PENDING') {
+        
+                            // Tunggu sampai task selesai
+                            def taskStatus = ""
+                            def maxWait = 120 // 120 detik
+                            def waited = 0
+                            while (waited < maxWait) {
+                                def response = sh(
+                                    script: """curl -s -u "${SONAR_TOKEN}:" \
+                                        "${SONAR_HOST_URL}/api/ce/task?id=${env.sonarTaskID}" """,
+                                    returnStdout: true
+                                )
+        
+                                taskStatus = sh(
+                                    script: "echo '${response}' | jq -r '.task.status'",
+                                    returnStdout: true
+                                ).trim()
+        
+                                if (taskStatus in ["SUCCESS", "FAILED", "CANCELED"]) {
+                                    env.analysisId = sh(
+                                        script: "echo '${response}' | jq -r '.task.analysisId'",
+                                        returnStdout: true
+                                    ).trim()
                                     break
                                 }
-                                retryCount++
+                                sleep 3
+                                waited += 3
                             }
-
-                            if (qualityGateResult.status == 'IN_PROGRESS' || qualityGateResult.status == 'PENDING') {
-                                echo "Quality Gate check timed out after ${maxRetries} retries. Please verify the SonarQube server for details."
-                            }
-                            if (qualityGateResult.status == 'ERROR') {
-                                echo "SonarQube Quality Gate gagal dengan status: ${qualityGateResult.status}. Pipeline bypassed."
-                            }
-
-                            env.analysisId = sh(
-                                script: """
-                                    curl -s -u "${SONAR_TOKEN}:" \
-                                        "${SONAR_HOST_URL}/api/ce/task?id=${env.sonarTaskID}" \
-                                        | jq -r '.task.analysisId'
-                                """,
-                                returnStdout: true
-                            ).trim()
+        
+                            echo "Task Status: ${taskStatus}"
                             echo "SonarQube Analysis ID: ${env.analysisId}"
-
-                            sh """
-                                curl -s -u "${SONAR_TOKEN}:" \
-                                    "${SONAR_HOST_URL}/api/issues/search?analysisId=${env.analysisId}" \
-                                    -o sonarqube-detailed-scan-report.json
-                            """
-
-                            archiveArtifacts artifacts: 'sonarqube-detailed-scan-report.json', fingerprint: true
+        
+                            // Ambil detail issue dari analysis ID
+                            if (env.analysisId) {
+                                sh """
+                                    curl -s -u "${SONAR_TOKEN}:" \
+                                        "${SONAR_HOST_URL}/api/issues/search?analysisId=${env.analysisId}" \
+                                        -o sonarqube-detailed-scan-report.json
+                                """
+                                archiveArtifacts artifacts: 'sonarqube-detailed-scan-report.json', fingerprint: true
+                            } else {
+                                echo "Tidak ada Analysis ID yang valid, skip download report."
+                            }
                         }
                     }
                 }
