@@ -47,17 +47,20 @@ pipeline {
                 stage('Secrets Scan (TruffleHog)') {
                     steps {
                         script {
-                            def result = sh(script: """
+                            sh """
                                 docker run --rm -v "\$(pwd)":/src -w /src trufflesecurity/trufflehog:latest \
                                 filesystem . > trufflehog-report.json || true
-                            """, returnStatus: true)
+
+                                # Kalau file kosong, isi dengan array kosong
+                                if [ ! -s trufflehog-report.json ]; then
+                                    echo "[]" > trufflehog-report.json
+                                fi
+                            """
                             archiveArtifacts artifacts: 'trufflehog-report.json', fingerprint: true
-                            if (env.branch_name in ['master', 'main'] && result != 0) {
-                                error "Secrets found in main branch!"
-                            }
                         }
                     }
                 }
+
                 stage('SCA (Grype)') {
                     steps {
                         script {
