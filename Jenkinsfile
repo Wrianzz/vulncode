@@ -10,6 +10,8 @@ pipeline {
         DD_ENGAGEMENT = 'ci/cd'
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
         BRANCH_TAG = 'main'
+        DD_URL = 'http://192.168.88.20:8280'
+        DD_API = credentials('defectdojo-api-key')
 
         // Docker image name lokal
         IMAGE_NAME_BASE = 'my-app'
@@ -184,7 +186,7 @@ pipeline {
                             echo "Uploading ${u.file} to DefectDojo..."
                             sh """
                                 curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
-                                  -H "Authorization: Token ${DD_API_KEY}" \
+                                  -H "Authorization: Token ${DD_API}" \
                                   -F "product_name=${DD_PRODUCT_NAME} \
                                   -F "engagement_name=${DD_ENGAGEMENT}" \
                                   -F "scan_type=${u.scanType}" \
