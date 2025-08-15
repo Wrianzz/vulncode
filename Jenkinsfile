@@ -187,15 +187,14 @@ pipeline {
                         [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
                         [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
                     ]
-        
+
                     uploads.each { u ->
                         if (fileExists(u.file)) {
                             echo "📤 Processing ${u.file} for DefectDojo..."
-        
+
                             withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
-                                // Cek apakah scan sudah ada
-                                def scanCount = sh(
-                                    script: """
+                                def scanExists = sh(
+                                     script: """
                                         curl -s -G "${DD_URL}/api/v2/tests/" \
                                           -H "Authorization: Token ${DD_API_KEY}" \
                                           --data-urlencode "engagement__name=${DD_ENGAGEMENT}" \
@@ -204,27 +203,33 @@ pipeline {
                                     """,
                                     returnStdout: true
                                 ).trim()
-        
-                                def endpoint = scanCount != "0" ? "reimport-scan" : "import-scan"
-                                echo "➡️  Using endpoint: ${endpoint} (count=${scanCount})"
-        
-                                sh """
-                                    curl -X POST "${DD_URL}/api/v2/${endpoint}/" \
-                                      -H "Authorization: Token ${DD_API_KEY}" \
-                                      -F "product_name=${DD_PRODUCT_NAME}" \
-                                      -F "engagement_name=${DD_ENGAGEMENT}" \
-                                      -F "scan_type=${u.scanType}" \
-                                      -F "file=@${u.file}" \
-                                      -F "build_id=${env.BUILD_NUMBER}" \
-                                      -F "branch_tag=${BRANCH_TAG}" \
-                                      -F "commit_hash=${env.COMMIT_HASH}" \
-                                      -F "source_code_management_uri=${SOURCE_CODE_URL}" \
-                                      -F "version=build-${env.BUILD_NUMBER}" \
-                                      -F "active=true" \
-                                      -F "verified=true" \
-                                      -F "do_not_reactivate=false" \
-                                      -F "close_old_findings=false"
-                                """
+
+                                if (scanExists != "0") {
+                                    echo "🔄 Reimport scan for ${u.scanType}"
+                                    sh """curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
+                                          -H "Authorization: Token ${DD_API_KEY}" \
+                                          -F "engagement=${DD_ENGAGEMENT_ID}" \
+                                          -F "scan_type=${u.scanType}" \
+                                          -F "file=@${u.file}" \
+                                          -F "commit_hash=${env.COMMIT_HASH}" \
+                                          -F "branch_tag=${BRANCH_TAG}" \
+                                          -F "source_code_management_uri=${SOURCE_CODE_URL}" \
+                                          -F "version=build-${env.BUILD_NUMBER}" \
+                                          -F "active=true" \
+                                          -F "verified=true" \
+                                          -F "do_not_reactivate=false" \
+                                          -F "close_old_findings=false"
+                                    """
+                                } else {
+                                    defectDojoPublisher(
+                                    artifact: u.file,
+                                    productName: "${DD_PRODUCT_NAME}",
+                                    scanType: "${u.scanType}",
+                                    engagementName: "${DD_ENGAGEMENT}",
+                                    defectDojoCredentialsId: 'defectdojo-api-key',
+                                    sourceCodeUrl: "${SOURCE_CODE_URL}"
+                                    )
+                                }
                             }
                         } else {
                             echo "⏭️ Skip upload: ${u.file} tidak ada atau kosong."
@@ -234,7 +239,7 @@ pipeline {
             }
         }
     }
-
+    
     post {
          always {
             echo "Pipeline selesai."
