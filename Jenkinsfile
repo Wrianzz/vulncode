@@ -212,6 +212,7 @@ pipeline {
                                           -F "engagement_name=${DD_ENGAGEMENT}" \
                                           -F "scan_type=${u.scanType}" \
                                           -F "file=@${u.file}" \
+                                          -F "build_id=${env.BUILD_NUMBER}" \
                                           -F "commit_hash=${env.COMMIT_HASH}" \
                                           -F "branch_tag=${BRANCH_TAG}" \
                                           -F "source_code_management_uri=${SOURCE_CODE_URL}" \
