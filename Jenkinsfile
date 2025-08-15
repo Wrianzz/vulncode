@@ -11,8 +11,7 @@ pipeline {
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
         BRANCH_TAG = 'main'
         DD_URL = 'http://192.168.88.20:8280'
-        DD_API = credentials('defectdojo-api-key')
-
+        
         // Docker image name lokal
         IMAGE_NAME_BASE = 'my-app'
 
@@ -184,6 +183,7 @@ pipeline {
                     uploads.each { u ->
                         if (fileExists(u.file)) {
                             echo "Uploading ${u.file} to DefectDojo..."
+                            withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API')]) {
                             sh """
                                 curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
                                   -H "Authorization: Token ${DD_API}" \
@@ -199,6 +199,7 @@ pipeline {
                                   -F "verified=true" \
                                   -F "close_old_findings=false"
                             """
+                            }
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
                         }
