@@ -25,6 +25,14 @@ pipeline {
     }
 
     stages {
+        stage('Init') {
+            steps {
+                script {
+                    echo "🚀 Starting build number: ${env.BUILD_NUMBER}"
+                }
+            }
+        }
+
         stage('Checkout') {
             steps {
                 script {
@@ -181,7 +189,7 @@ pipeline {
                                 defectDojoCredentialsId: 'defectdojo-api-key',
                                 sourceCodeUrl: "${SOURCE_CODE_URL}",
                                 branchTag: "${BRANCH_TAG}",
-                                reactivate: true
+                                buildId: "${env.BUILD_NUMBER}"
                             )
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
