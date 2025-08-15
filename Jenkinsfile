@@ -116,62 +116,56 @@ pipeline {
             }
         }
 
-        stage('SAST (SonarQube)') {
+        stage('Publish to DefectDojo') {
             steps {
-                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv("${env.SONAR_ENV}") {
-                        script {
-                            sh """
-                                ${SONAR_SCANNER}/bin/sonar-scanner \
-                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                    -Dsonar.sources=. \
-                                    -Dsonar.token=$SONAR_TOKEN \
-                                | tee sonarqube_out.txt
-                                """
-
-                            // Ambil taskId yang pertama muncul
-                            env.sonarTaskID = sh(
-                                script: "grep -o 'id=[a-f0-9-]\\+' sonarqube_out.txt | cut -d= -f2",
-                                returnStdout: true
-                            ).trim()
-                            echo "SonarQube Task ID: ${env.sonarTaskID}"
+                script {
+                    def uploads = [
+                        [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
+                        [file: 'grype-report.json',      scanType: 'Anchore Grype'],
+                        [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
+                        [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
+                    ]
         
-                            // Tunggu sampai task selesai
-                            def taskStatus = ""
-                            def maxWait = 120 // 120 detik
-                            def waited = 0
-                            while (waited < maxWait) {
-                                def response = sh(
-                                    script: """curl -s -u "${SONAR_TOKEN}:" \
-                                        "${SONAR_HOST_URL}/api/ce/task?id=${env.sonarTaskID}" """,
-                                    returnStdout: true
-                                )
+                    uploads.each { u ->
+                        if (fileExists(u.file)) {
+                            echo "📤 Processing ${u.file} for DefectDojo..."
         
-                                taskStatus = sh(
-                                    script: "echo '${response}' | jq -r '.task.status'",
+                            withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
+                                // Cek apakah scan sudah ada
+                                def scanCount = sh(
+                                    script: """
+                                        curl -s -G "${DD_URL}/api/v2/tests/" \
+                                          -H "Authorization: Token ${DD_API_KEY}" \
+                                          --data-urlencode "engagement__name=${DD_ENGAGEMENT}" \
+                                          --data-urlencode "scan_type=${u.scanType}" \
+                                          | jq '.count'
+                                    """,
                                     returnStdout: true
                                 ).trim()
         
-                                if (taskStatus in ["SUCCESS", "FAILED", "CANCELED"]) {
-                                    env.analysisId = sh(
-                                        script: "echo '${response}' | jq -r '.task.analysisId'",
-                                        returnStdout: true
-                                    ).trim()
-                                    break
-                                }
-                                sleep 3
-                                waited += 3
+                                def endpoint = scanCount != "0" ? "reimport-scan" : "import-scan"
+                                echo "➡️  Using endpoint: ${endpoint} (count=${scanCount})"
+        
+                                sh """
+                                    curl -X POST "${DD_URL}/api/v2/${endpoint}/" \
+                                      -H "Authorization: Token ${DD_API_KEY}" \
+                                      -F "product_name=${DD_PRODUCT_NAME}" \
+                                      -F "engagement_name=${DD_ENGAGEMENT}" \
+                                      -F "scan_type=${u.scanType}" \
+                                      -F "file=@${u.file}" \
+                                      -F "build_id=${env.BUILD_NUMBER}" \
+                                      -F "branch_tag=${BRANCH_TAG}" \
+                                      -F "commit_hash=${env.COMMIT_HASH}" \
+                                      -F "source_code_management_uri=${SOURCE_CODE_URL}" \
+                                      -F "version=build-${env.BUILD_NUMBER}" \
+                                      -F "active=true" \
+                                      -F "verified=true" \
+                                      -F "do_not_reactivate=false" \
+                                      -F "close_old_findings=false"
+                                """
                             }
-        
-                            echo "Task Status: ${taskStatus}"
-                            echo "SonarQube Analysis ID: ${env.analysisId}"
-        
-                            sh """
-                                curl -s -u "${SONAR_TOKEN}:" \
-                                "${SONAR_HOST_URL}/api/hotspots/search?project=${SONAR_PROJECT_KEY}" \
-                                -o sonarqube-scan-report.json
-                               """
-                             archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
+                        } else {
+                            echo "⏭️ Skip upload: ${u.file} tidak ada atau kosong."
                         }
                     }
                 }
