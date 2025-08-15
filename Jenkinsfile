@@ -6,8 +6,8 @@ pipeline {
         gitUrl = 'https://github.com/Wrianzz/vulncode.git'
 
         // DefectDojo
-        DD_PRODUCT_NAME = 'my-product'
-        DD_ENGAGEMENT = 'ci/cd'
+        DD_PRODUCT_NAME = 'DevSecOps'
+        DD_ENGAGEMENT = 'Vulnerable-Code'
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
         BRANCH_TAG = 'main'
         DD_URL = 'http://192.168.88.20:8280'
