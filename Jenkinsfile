@@ -184,21 +184,21 @@ pipeline {
                         if (fileExists(u.file)) {
                             echo "Uploading ${u.file} to DefectDojo..."
                             withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API')]) {
-                            sh """
-                                curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
-                                  -H "Authorization: Token ${DD_API}" \
-                                  -F "product_name=${DD_PRODUCT_NAME} \
-                                  -F "engagement_name=${DD_ENGAGEMENT}" \
-                                  -F "scan_type=${u.scanType}" \
-                                  -F "file=@${u.file}" \
-                                  -F "build_id=${env.BUILD_NUMBER}" \
-                                  -F "branch_tag=${BRANCH_TAG}" \
-                                  -F "source_code_management_uri=${SOURCE_CODE_URL}" \
-                                  -F "version=build-${env.BUILD_NUMBER}" \
+                            sh '''
+                                curl -X POST "$DD_URL/api/v2/reimport-scan/" \
+                                  -H "Authorization: Token $DD_API" \
+                                  -F "product_name=$DD_PRODUCT_NAME \
+                                  -F "engagement_name=$DD_ENGAGEMENT" \
+                                  -F "scan_type=$u.scanType" \
+                                  -F "file=@$u.file" \
+                                  -F "build_id=$env.BUILD_NUMBER" \
+                                  -F "branch_tag=$BRANCH_TAG" \
+                                  -F "source_code_management_uri=$SOURCE_CODE_URL" \
+                                  -F "version=build-$env.BUILD_NUMBER" \
                                   -F "active=true" \
                                   -F "verified=true" \
                                   -F "close_old_findings=false"
-                            """
+                            '''
                             }
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
