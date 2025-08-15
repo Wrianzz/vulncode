@@ -5,15 +5,10 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Salin requirements.txt terlebih dahulu
-COPY requirements.txt .
+COPY . .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Salin semua file aplikasi ke container
-COPY app.py .
-COPY data.db .
-COPY requirements.txt .
 
 # Expose port 8000 untuk Flask
 EXPOSE 8000
