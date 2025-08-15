@@ -115,7 +115,69 @@ pipeline {
                 }
             }
         }
+        
+        stage('SAST (SonarQube)') {
+            steps {
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv("${env.SONAR_ENV}") {
+                        script {
+                            sh """
+                                ${SONAR_SCANNER}/bin/sonar-scanner \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.token=$SONAR_TOKEN \
+                                | tee sonarqube_out.txt
+                                """
 
+                            // Ambil taskId yang pertama muncul
+                            env.sonarTaskID = sh(
+                                script: "grep -o 'id=[a-f0-9-]\\+' sonarqube_out.txt | cut -d= -f2",
+                                returnStdout: true
+                            ).trim()
+                            echo "SonarQube Task ID: ${env.sonarTaskID}"
+        
+                            // Tunggu sampai task selesai
+                            def taskStatus = ""
+                            def maxWait = 120 // 120 detik
+                            def waited = 0
+                            while (waited < maxWait) {
+                                def response = sh(
+                                    script: """curl -s -u "${SONAR_TOKEN}:" \
+                                        "${SONAR_HOST_URL}/api/ce/task?id=${env.sonarTaskID}" """,
+                                    returnStdout: true
+                                )
+        
+                                taskStatus = sh(
+                                    script: "echo '${response}' | jq -r '.task.status'",
+                                    returnStdout: true
+                                ).trim()
+        
+                                if (taskStatus in ["SUCCESS", "FAILED", "CANCELED"]) {
+                                    env.analysisId = sh(
+                                        script: "echo '${response}' | jq -r '.task.analysisId'",
+                                        returnStdout: true
+                                    ).trim()
+                                    break
+                                }
+                                sleep 3
+                                waited += 3
+                            }
+        
+                            echo "Task Status: ${taskStatus}"
+                            echo "SonarQube Analysis ID: ${env.analysisId}"
+        
+                            sh """
+                                curl -s -u "${SONAR_TOKEN}:" \
+                                "${SONAR_HOST_URL}/api/hotspots/search?project=${SONAR_PROJECT_KEY}" \
+                                -o sonarqube-scan-report.json
+                               """
+                             archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
+                        }
+                    }
+                }
+            }
+        }
+        
         stage('Publish to DefectDojo') {
             steps {
                 script {
