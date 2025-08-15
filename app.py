@@ -1,21 +1,17 @@
 from flask import Flask, request, jsonify
 import os
 import sqlite3
-import bcrypt
-import subprocess
-from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
-app.config['API'] = os.getenv('API', 'super-api')
-csrf = CSRFProtect(app)
+
+GROQ_API_KEY = "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"
 
 DB_PATH = 'users.db'
-
 def init_db():
     first_time = not os.path.exists(DB_PATH)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-
+    # Buat tabel jika belum ada
     cur.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,14 +20,12 @@ def init_db():
     );
     ''')
     conn.commit()
-
     if first_time:
-        hashed_pw = bcrypt.hashpw("password123".encode('utf-8'), bcrypt.gensalt())
-        cur.execute("INSERT INTO users (username, password) VALUES (?, ?);", ('admin', hashed_pw))
+        cur.execute("INSERT INTO users (username, password) VALUES ('admin', 'password123');")
         conn.commit()
     conn.close()
-
 init_db()
+
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -40,53 +34,50 @@ def get_db_connection():
 
 @app.route("/")
 def index():
-    return "Hello from SATNUSA secure app!"
+    return "Hello from SATNUSA vulnerable app!"
 
 @app.route("/login", methods=["POST"])
 def login():
     username = request.form.get("username", "")
     password = request.form.get("password", "")
 
+    query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}';"
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+        cur.execute(query)
         user = cur.fetchone()
     except Exception as e:
         conn.close()
         return jsonify({"error": "Database error", "detail": str(e)}), 500
 
     conn.close()
-
-    if user and bcrypt.checkpw(password.encode('utf-8'), user['password']):
+    if user:
         return jsonify({"message": f"Welcome, {user['username']}!"})
     else:
         return jsonify({"message": "Invalid credentials"}), 401
 
-@app.route("/exec", methods=["POST"])
+@app.route("/exec")
 def exec_cmd():
     """
-    Eksekusi command yang diizinkan saja (whitelist)
+    Contoh eksploit:
+      /exec?cmd=ls
+      /exec?cmd=ls%20-la
+      /exec?cmd=cat%20users.db
+      /exec?cmd=rm%20temp.txt
     """
-    allowed_commands = {
-        "list_files": ["ls", "-la"],
-        "disk_usage": ["df", "-h"]
-    }
-    cmd_key = request.json.get("cmd")
-    if cmd_key not in allowed_commands:
-        return jsonify({"error": "Command not allowed"}), 403
-
+    cmd = request.args.get("cmd", "")
+    if not cmd:
+        return jsonify({"error": "No cmd provided"}), 400
     try:
-        result = subprocess.check_output(allowed_commands[cmd_key], stderr=subprocess.STDOUT, text=True)
-        return f"<pre>{result}</pre>"
-    except subprocess.CalledProcessError as e:
-        return jsonify({"error": "Execution error", "detail": e.output}), 500
+        result = os.popen(cmd).read()
+    except Exception as e:
+        return jsonify({"error": "Execution error", "detail": str(e)}), 500
+    return f"<pre>{result}</pre>"
 
-@app.route("/show_key", methods=["GET"])
+@app.route("/show_key")
 def show_key():
-    if not GROQ_API_KEY:
-        return jsonify({"error": "API Key not set"}), 404
-    return jsonify({"message": "API Key is configured but not exposed for security reasons"})
+    return jsonify({"GROQ_API_KEY": GROQ_API_KEY})
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
