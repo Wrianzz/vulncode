@@ -219,8 +219,6 @@ pipeline {
                                       -F "commit_hash=${env.COMMIT_HASH}" \
                                       -F "source_code_management_uri=${SOURCE_CODE_URL}" \
                                       -F "version=build-${env.BUILD_NUMBER}" \
-                                      -F "active=true" \
-                                      -F "verified=true" \
                                       -F "do_not_reactivate=false" \
                                       -F "close_old_findings=false"
                                 """
