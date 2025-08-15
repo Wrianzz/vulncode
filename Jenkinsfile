@@ -178,19 +178,25 @@ pipeline {
                         [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
                         [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
                     ]
-                   
+        
                     uploads.each { u ->
                         if (fileExists(u.file)) {
-                            defectDojoPublisher(
-                                artifact: u.file,
-                                productName: "${DD_PRODUCT_NAME}",
-                                scanType: "${u.scanType}",
-                                engagementName: "${DD_ENGAGEMENT}",
-                                defectDojoCredentialsId: 'defectdojo-api-key',
-                                sourceCodeUrl: "${SOURCE_CODE_URL}",
-                                branchTag: "${BRANCH_TAG}",
-                                buildId: "${env.BUILD_NUMBER}"
-                            )
+                            echo "Uploading ${u.file} to DefectDojo..."
+                            sh """
+                                curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
+                                  -H "Authorization: Token ${DD_API_KEY}" \
+                                  -F "product_name=${DD_PRODUCT_NAME} \
+                                  -F "engagement_name=${DD_ENGAGEMENT}" \
+                                  -F "scan_type=${u.scanType}" \
+                                  -F "file=@${u.file}" \
+                                  -F "build_id=${env.BUILD_NUMBER}" \
+                                  -F "branch_tag=${BRANCH_TAG}" \
+                                  -F "source_code_management_uri=${SOURCE_CODE_URL}" \
+                                  -F "version=build-${env.BUILD_NUMBER}" \
+                                  -F "active=true" \
+                                  -F "verified=true" \
+                                  -F "close_old_findings=false"
+                            """
                         } else {
                             echo "Skip upload: ${u.file} tidak ada atau kosong."
                         }
