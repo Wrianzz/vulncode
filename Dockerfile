@@ -7,6 +7,7 @@ WORKDIR /app
 # Salin requirements.txt terlebih dahulu
 COPY requirements.txt .
 COPY app.py .
+COPY data.db .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
