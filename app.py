@@ -6,7 +6,7 @@ import subprocess
 from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'super-secret-key')
+app.config['API'] = os.getenv('API', 'super-api')
 csrf = CSRFProtect(app)
 
 DB_PATH = 'users.db'
