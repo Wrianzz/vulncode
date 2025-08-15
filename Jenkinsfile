@@ -220,7 +220,7 @@ pipeline {
                                           -F "active=true" \
                                           -F "verified=true" \
                                           -F "do_not_reactivate=false" \
-                                          -F "close_old_findings=false"
+                                          -F "close_old_findings=true"
                                     """
                                 } else {
                                     defectDojoPublisher(
