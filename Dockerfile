@@ -11,7 +11,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Salin semua file aplikasi ke container
-COPY . .
+COPY app.py .
+COPY data.db .
+COPY requirements.txt .
 
 # Expose port 8000 untuk Flask
 EXPOSE 8000
