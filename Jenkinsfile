@@ -201,7 +201,7 @@ pipeline {
                                   -F "file=@${u.file}" \
                                   -F "build_id=${env.BUILD_NUMBER}" \
                                   -F "branch_tag=${BRANCH_TAG}" \
-                                  -F "commit_hash=${env.COMMIT_HASH}"
+                                  -F "commit_hash=${env.COMMIT_HASH}" \
                                   -F "source_code_management_uri=${SOURCE_CODE_URL}" \
                                   -F "version=build-${env.BUILD_NUMBER}" \
                                   -F "active=true" \
