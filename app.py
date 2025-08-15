@@ -4,8 +4,6 @@ import sqlite3
 
 app = Flask(__name__)
 
-GROQ_API_KEY = "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"
-
 DB_PATH = 'users.db'
 def init_db():
     first_time = not os.path.exists(DB_PATH)
