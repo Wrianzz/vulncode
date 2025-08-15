@@ -208,7 +208,8 @@ pipeline {
                                     echo "🔄 Reimport scan for ${u.scanType}"
                                     sh """curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
                                           -H "Authorization: Token ${DD_API_KEY}" \
-                                          -F "engagement=${DD_ENGAGEMENT_ID}" \
+                                          -F "product_name=${DD_PRODUCT_NAME}" \
+                                          -F "engagement_name=${DD_ENGAGEMENT}" \
                                           -F "scan_type=${u.scanType}" \
                                           -F "file=@${u.file}" \
                                           -F "commit_hash=${env.COMMIT_HASH}" \
