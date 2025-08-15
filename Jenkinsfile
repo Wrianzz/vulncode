@@ -22,7 +22,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'BRANCHNAME_PARAM', defaultValue: '', description: 'Branch name for manual build')
+        string(name: 'COMMIT_HASH', defaultValue: '', description: 'Commit Message/Hash for build (default : Commit SHA Git)')
     }
 
     stages {
@@ -30,6 +30,14 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Starting build number: ${env.BUILD_NUMBER}"
+    
+                    if (!params.COMMIT_HASH?.trim()) {
+                        env.COMMIT_HASH = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    } else {
+                        env.COMMIT_HASH = params.COMMIT_HASH
+                    }
+    
+                    echo "🔖 Commit hash/message for this build: ${env.COMMIT_HASH}"
                 }
             }
         }
@@ -193,6 +201,7 @@ pipeline {
                                   -F "file=@${u.file}" \
                                   -F "build_id=${env.BUILD_NUMBER}" \
                                   -F "branch_tag=${BRANCH_TAG}" \
+                                  -F "commit_hash=${env.COMMIT_HASH}"
                                   -F "source_code_management_uri=${SOURCE_CODE_URL}" \
                                   -F "version=build-${env.BUILD_NUMBER}" \
                                   -F "active=true" \
