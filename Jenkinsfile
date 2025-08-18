@@ -181,74 +181,72 @@ pipeline {
         
         stage('Publish to DefectDojo') {
             steps {
-                script {
-                    def uploads = [
-                        [file: 'trufflehog-report.json',         scanType: 'Trufflehog Scan'],
-                        [file: 'grype-report.json',              scanType: 'Anchore Grype'],
-                        [file: 'trivy-report.json',              scanType: 'Trivy Scan'],
-                        [file: 'sonarqube-scan-report.json',     scanType: 'SonarQube Scan']
-                    ]
+                    script {
+                        def uploads = [
+                            [file: 'trufflehog-report.json',     scanType: 'Trufflehog Scan'],
+                            [file: 'grype-report.json',          scanType: 'Anchore Grype'],
+                            [file: 'trivy-report.json',          scanType: 'Trivy Scan'],
+                            [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
+                        ]
+            
+                        withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
 
-                    uploads.each { u ->
-                        if (fileExists(u.file)) {
-                            echo "📤 Processing ${u.file} for DefectDojo..."
+                        def VERIFIED_POLICY = [
+                            'Trufflehog Scan': true,
+                            'Anchore Grype'  : false,
+                            'Trivy Scan'     : false,
+                            'SonarQube Scan' : false
+                            ]
 
-                            withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
-
-                                // Cek apakah sudah ada Test untuk scanType ini di engagement dynamic
-                                def scanExists = sh(
-                                    script: """
-                                        curl -s -G "${DD_URL}/api/v2/tests/" \
-                                          -H "Authorization: Token ${DD_API_KEY}" \
-                                          --data-urlencode "engagement__name=${env.engagement_name}" \
-                                          --data-urlencode "scan_type=${u.scanType}" \
-                                          | jq '.count'
-                                    """,
-                                    returnStdout: true
-                                ).trim()
-
-                                if (scanExists != "0") {
-                                    echo "🔄 Reimport scan for ${u.scanType} -> ${env.engagement_name}"
-                                    sh """
-                                        curl -sS -X POST "${DD_URL}/api/v2/reimport-scan/" \
-                                          -H "Authorization: Token ${DD_API_KEY}" \
-                                          -F "product_name=${DD_PRODUCT_NAME}" \
-                                          -F "engagement_name=${env.engagement_name}" \
-                                          -F "scan_type=${u.scanType}" \
-                                          -F "file=@${u.file}" \
-                                          -F "build_id=${env.BUILD_NUMBER}" \
-                                          -F "commit_hash=${env.COMMIT_HASH}" \
-                                          -F "branch_tag=${env.branch_name}" \
-                                          -F "source_code_management_uri=${SOURCE_CODE_URL}" \
-                                          -F "version=build-${env.BUILD_NUMBER}" \
-                                          -F "active=true" \
-                                          -F "verified=true" \
-                                          -F "do_not_reactivate=false" \
-                                          -F "close_old_findings=true" \
-                                          -F "auto_create_context=true"
-                                    """
-                                } else {
-                                    // Upload via plugin, auto-create engagement dengan nama dynamic (override global settings)
-                                    defectDojoPublisher(
-                                        artifact: u.file,
-                                        productName: "${DD_PRODUCT_NAME}",
-                                        scanType: "${u.scanType}",
-                                        engagementName: "${env.engagement_name}",
-                                        branchTag: "${env.branch_name}",
-                                        commitHash: "${env.COMMIT_HASH}",
-                                        sourceCodeUrl: "${SOURCE_CODE_URL}",
-                                        // override agar URL & API key & auto-create dipakai dari sini
-                                        overrideGlobals: true,
-                                        defectDojoUrl: "${DD_URL}",
-                                        defectDojoCredentialsId: 'defectdojo-api-key',
-                                        autoCreateProducts: false,
-                                        autoCreateEngagements: true,
-                                        defectDojoReuploadScan: false   // first upload
-                                    )
-                                }
-                            }
+                        // Cek apakah engagement sudah ada (berdasarkan nama & product)
+                        def engagementCount = sh(
+                            script: """
+                            curl -s -G "${DD_URL}/api/v2/engagements/" \
+                            -H "Authorization: Token ${DD_API_KEY}" \
+                            --data-urlencode "name=${env.engagement_name}" \
+                            --data-urlencode "product__name=${DD_PRODUCT_NAME}" \
+                            | jq -r '.count'
+                        """,
+                        returnStdout: true
+                        ).trim()
+            
+                        // Siapkan field tanggal hanya jika engagement BELUM ada
+                        def dateFields = ""
+                        if (engagementCount == "0") {
+                            def startDate = java.time.LocalDate.now().toString()
+                            def endDate   = java.time.LocalDate.now().plusDays(180).toString()
+                            dateFields = "-F engagement_start_date=${startDate} -F engagement_end_date=${endDate}"
+                            echo "🆕 First-time engagement '${env.engagement_name}' → set dates ${startDate}..${endDate}"
                         } else {
-                            echo "⏭️ Skip upload: ${u.file} tidak ada atau kosong."
+                            echo "↔️ Engagement '${env.engagement_name}' sudah ada → tidak kirim field tanggal."
+                        }
+            
+                        uploads.each { u ->
+                            if (fileExists(u.file)) {
+                                def verifiedFlag = VERIFIED_POLICY.get(u.scanType, false) ? "true" : "false"
+                                echo "📤 Processing ${u.file} for DefectDojo..."
+                                sh """
+                                    curl -sS -X POST "${DD_URL}/api/v2/reimport-scan/" \
+                                        -H "Authorization: Token ${DD_API_KEY}" \
+                                        -F "product_name=${DD_PRODUCT_NAME}" \
+                                        -F "engagement_name=${env.engagement_name}" \
+                                        -F "scan_type=${u.scanType}" \
+                                        -F "file=@${u.file}" \
+                                        -F "build_id=${env.BUILD_NUMBER}" \
+                                        -F "commit_hash=${env.COMMIT_HASH}" \
+                                        -F "branch_tag=${env.branch_name}" \
+                                        -F "source_code_management_uri=${SOURCE_CODE_URL}" \
+                                        -F "version=build-${env.BUILD_NUMBER}" \
+                                        -F "active=true" \
+                                        -F "verified=${verifiedFlag}" \
+                                        -F "do_not_reactivate=false" \
+                                        -F "close_old_findings=true" \
+                                        -F "auto_create_context=true" \
+                                        ${dateFields}
+                                """
+                            } else {
+                              echo "⏭️ Skip upload: ${u.file} tidak ada atau kosong."
+                            }
                         }
                     }
                 }
