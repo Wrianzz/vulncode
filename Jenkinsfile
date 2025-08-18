@@ -106,14 +106,14 @@ pipeline {
         stage('Image Scan (Trivy)') {
             steps {
                 script {
-                    def trivyArgs = (env.branch_name in ['master', 'main']) ? '--severity HIGH,CRITICAL --exit-code 1' : ''
+                    def trivyArgs = (env.branch_name in ['master', 'main', 'production']) ? '--severity HIGH,CRITICAL --exit-code 1' : ''
                     def result = sh(script: """
                         docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
                         image ${trivyArgs} --format json ${IMAGE_NAME_BASE}:${env.imageTag} \
                         > trivy-report.json || true
                     """, returnStatus: true)
                     archiveArtifacts artifacts: 'trivy-report.json', fingerprint: true
-                    if (env.branch_name in ['master', 'main'] && result != 0) {
+                    if (env.branch_name in ['master', 'main', 'production'] && result != 0) {
                         error "Critical vulnerabilities found in main branch image!"
                     }
                 }
