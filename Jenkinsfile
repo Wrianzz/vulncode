@@ -9,7 +9,6 @@ pipeline {
         DD_PRODUCT_NAME = 'DevSecOps'
         DD_ENGAGEMENT = 'Vulnerable-Code'
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
-        BRANCH_TAG = 'main'
         DD_URL = 'http://192.168.88.20:8280'
         
         // Docker image name lokal
@@ -26,38 +25,77 @@ pipeline {
     }
 
     stages {
-        stage('Init') {
-            steps {
-                script {
-                    echo "🚀 Starting build number: ${env.BUILD_NUMBER}"
+      stage('Init') {
+        steps {
+          script {
+            echo "🚀 Starting build number: ${env.BUILD_NUMBER}"
     
-                    if (!params.COMMIT_HASH?.trim()) {
-                        env.COMMIT_HASH = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                    } else {
-                        env.COMMIT_HASH = params.COMMIT_HASH
-                    }
+            // Commit hash (punyamu sudah oke)
+            if (!params.COMMIT_HASH?.trim()) {
+              env.COMMIT_HASH = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+            } else {
+              env.COMMIT_HASH = params.COMMIT_HASH
+            }
     
-                    echo "🔖 Commit hash/message for this build: ${env.COMMIT_HASH}"
-                }
-            }
+            // --- DETEKSI BRANCH OTOMATIS (pra-checkout) ---
+            // Urutan prioritas:
+            // 1) PR build: CHANGE_BRANCH (source branch)
+            // 2) Multibranch: BRANCH_NAME
+            // 3) Freestyle Git SCM: GIT_BRANCH (biasanya "origin/xxx" -> buang prefix)
+            // 4) Param manual (opsional), terakhir default 'main'
+            env.branch_name = (
+                env.CHANGE_BRANCH ?:                      // e.g. feature/foo pada PR
+                env.BRANCH_NAME   ?:                      // multibranch: "main", "prod", dll
+                (env.GIT_BRANCH?.replaceAll('^origin/','')) ?: // freestyle: "origin/main" -> "main"
+                params.BRANCHNAME_PARAM?.trim() ?: 
+                'main'
+            )
+    
+            // Set sementara; nanti kita "finalize" setelah checkout
+            env.BRANCH_TAG = env.branch_name
+    
+            echo "🔖 Tentative branch: ${env.branch_name}"
+            echo "🔖 Tentative BRANCH_TAG: ${env.BRANCH_TAG}"
+          }
         }
-
-        stage('Checkout') {
-            steps {
-                script {
-                    def isManual = params.BRANCHNAME_PARAM?.trim()
-                    if (isManual) {
-                        env.branch_name = params.BRANCHNAME_PARAM
-                    } else {
-                        env.branch_name = env.GIT_BRANCH?.replaceAll('origin/', '') ?: 'main'
-                    }
-
-                    cleanWs()
-                    git branch: env.branch_name, url: env.gitUrl
-                    env.imageTag = env.BUILD_NUMBER
-                }
+      }
+    
+      stage('Checkout') {
+        steps {
+          script {
+            // Pakai branch yang sudah kita deteksi di Init
+            cleanWs()
+            git branch: env.branch_name, url: env.gitUrl
+    
+            // --- FINALISASI (pasca-checkout) ---
+            // Di beberapa setup non-multibranch, git bisa checkout detached HEAD.
+            // Kita coba perkuat deteksi; kalau gagal, tetap pakai nilai sebelumnya.
+            def after = sh(
+              script: '''
+                # Coba ambil nama branch "asli"
+                name=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+                if [ "$name" = "HEAD" ] || [ -z "$name" ]; then
+                  # Fallback: coba baca remote tracking
+                  name=$(git branch -r --contains HEAD | head -n1 | sed -E "s/.*origin\\///" | tr -d " ")
+                fi
+                echo "$name"
+              ''',
+              returnStdout: true
+            ).trim()
+    
+            if (after) {
+              env.branch_name = after
+              env.BRANCH_TAG  = after
             }
+    
+            // Build number buat image tag (punyamu udah oke)
+            env.imageTag = env.BUILD_NUMBER
+    
+            echo "✅ Final branch: ${env.branch_name}"
+            echo "🏷️  BRANCH_TAG: ${env.BRANCH_TAG}"
+          }
         }
+      }
 
         stage('Test (Security)') {
             parallel {
