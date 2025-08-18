@@ -5,8 +5,8 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Salin requirements.txt terlebih dahulu
-COPY requirements.txt .
-COPY app.py .
+COPY . .
+COPY . .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
