@@ -192,23 +192,8 @@ pipeline {
                     uploads.each { u ->
                         if (fileExists(u.file)) {
                             echo "📤 Processing ${u.file} for DefectDojo..."
-
                             withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
-
-                                // Cek apakah sudah ada Test untuk scanType ini di engagement dynamic
-                                def scanExists = sh(
-                                    script: """
-                                        curl -s -G "${DD_URL}/api/v2/tests/" \
-                                          -H "Authorization: Token ${DD_API_KEY}" \
-                                          --data-urlencode "engagement__name=${env.engagement_name}" \
-                                          --data-urlencode "scan_type=${u.scanType}" \
-                                          | jq '.count'
-                                    """,
-                                    returnStdout: true
-                                ).trim()
-
-                                if (scanExists != "0") {
-                                    echo "🔄 Reimport scan for ${u.scanType} -> ${env.engagement_name}"
+                                echo "🔄 Reimport scan for ${u.scanType} -> ${env.engagement_name}"
                                     sh """
                                         curl -sS -X POST "${DD_URL}/api/v2/reimport-scan/" \
                                           -H "Authorization: Token ${DD_API_KEY}" \
@@ -227,25 +212,6 @@ pipeline {
                                           -F "close_old_findings=true" \
                                           -F "auto_create_context=true"
                                     """
-                                } else {
-                                    // Upload via plugin, auto-create engagement dengan nama dynamic (override global settings)
-                                    defectDojoPublisher(
-                                        artifact: u.file,
-                                        productName: "${DD_PRODUCT_NAME}",
-                                        scanType: "${u.scanType}",
-                                        engagementName: "${env.engagement_name}",
-                                        branchTag: "${env.branch_name}",
-                                        commitHash: "${env.COMMIT_HASH}",
-                                        sourceCodeUrl: "${SOURCE_CODE_URL}",
-                                        // override agar URL & API key & auto-create dipakai dari sini
-                                        overrideGlobals: true,
-                                        defectDojoUrl: "${DD_URL}",
-                                        defectDojoCredentialsId: 'defectdojo-api-key',
-                                        autoCreateProducts: false,
-                                        autoCreateEngagements: true,
-                                        defectDojoReuploadScan: false   // first upload
-                                    )
-                                }
                             }
                         } else {
                             echo "⏭️ Skip upload: ${u.file} tidak ada atau kosong."
