@@ -7,22 +7,22 @@ pipeline {
 
         // DefectDojo
         DD_PRODUCT_NAME = 'DevSecOps'
-        DD_ENGAGEMENT = 'Vulnerable-Code'
+        DD_ENGAGEMENT   = 'Vulnerable-Code'    // tetap disimpan kalau butuh, tapi akan diganti dynamic engagement
         SOURCE_CODE_URL = 'https://github.com/Wrianzz/vulncode.git'
-        BRANCH_TAG = 'main'
-        DD_URL = 'http://192.168.88.20:8280'
+        DD_URL          = 'http://192.168.88.20:8280'
         
         // Docker image name lokal
         IMAGE_NAME_BASE = 'my-app'
 
         // SonarQube
         SONAR_PROJECT_KEY = 'vulnerable-code'
-        SONAR_HOST_URL = 'http://192.168.88.20:9000'
-        SONAR_SCANNER = tool 'sonarqube'
+        SONAR_HOST_URL    = 'http://192.168.88.20:9000'
+        SONAR_SCANNER     = tool 'sonarqube'
     }
 
     parameters {
         string(name: 'COMMIT_HASH', defaultValue: '', description: 'Commit Message/Hash for build (default : Commit SHA Git)')
+        string(name: 'BRANCHNAME_PARAM', defaultValue: '', description: 'Branch name for manual build (kosongkan untuk auto-detect)')
     }
 
     stages {
@@ -30,13 +30,13 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Starting build number: ${env.BUILD_NUMBER}"
-    
+
+                    // Commit hash
                     if (!params.COMMIT_HASH?.trim()) {
                         env.COMMIT_HASH = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                     } else {
                         env.COMMIT_HASH = params.COMMIT_HASH
                     }
-    
                     echo "🔖 Commit hash/message for this build: ${env.COMMIT_HASH}"
                 }
             }
@@ -45,6 +45,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
+                    // Tentukan branch
                     def isManual = params.BRANCHNAME_PARAM?.trim()
                     if (isManual) {
                         env.branch_name = params.BRANCHNAME_PARAM
@@ -55,6 +56,11 @@ pipeline {
                     cleanWs()
                     git branch: env.branch_name, url: env.gitUrl
                     env.imageTag = env.BUILD_NUMBER
+
+                    // Buat engagement name berbasis product + branch, dan sanitize nama (ganti karakter non-aman jadi '-')
+                    // Contoh: DevSecOps-main, DevSecOps-production, DevSecOps-feature-login
+                    env.engagement_name = "${env.DD_PRODUCT_NAME}-${env.branch_name}".replaceAll(/[^A-Za-z0-9._-]/, '-')
+                    echo "🧩 Dynamic Engagement: ${env.engagement_name}"
                 }
             }
         }
@@ -65,9 +71,7 @@ pipeline {
                     steps {
                         script {
                             def result = sh(script: 'trufflehog filesystem . --json > trufflehog-report.json', returnStatus: true)
-
                             sh 'cat trufflehog-report.json || echo "Report kosong atau tidak terbaca"'
-
                             if (env.branch_name in ['master', 'main'] && result != 0) {
                                 echo "Secret ditemukan oleh TruffleHog di branch ${env.branch_name}. Pipeline bypassed."
                             } else {
@@ -127,7 +131,7 @@ pipeline {
                                     -Dsonar.sources=. \
                                     -Dsonar.token=$SONAR_TOKEN \
                                 | tee sonarqube_out.txt
-                                """
+                            """
 
                             // Ambil taskId yang pertama muncul
                             env.sonarTaskID = sh(
@@ -146,12 +150,10 @@ pipeline {
                                         "${SONAR_HOST_URL}/api/ce/task?id=${env.sonarTaskID}" """,
                                     returnStdout: true
                                 )
-        
                                 taskStatus = sh(
                                     script: "echo '${response}' | jq -r '.task.status'",
                                     returnStdout: true
                                 ).trim()
-        
                                 if (taskStatus in ["SUCCESS", "FAILED", "CANCELED"]) {
                                     env.analysisId = sh(
                                         script: "echo '${response}' | jq -r '.task.analysisId'",
@@ -162,7 +164,6 @@ pipeline {
                                 sleep 3
                                 waited += 3
                             }
-        
                             echo "Task Status: ${taskStatus}"
                             echo "SonarQube Analysis ID: ${env.analysisId}"
         
@@ -170,8 +171,8 @@ pipeline {
                                 curl -s -u "${SONAR_TOKEN}:" \
                                 "${SONAR_HOST_URL}/api/hotspots/search?project=${SONAR_PROJECT_KEY}" \
                                 -o sonarqube-scan-report.json
-                               """
-                             archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
+                            """
+                            archiveArtifacts artifacts: 'sonarqube-scan-report.json', fingerprint: true
                         }
                     }
                 }
@@ -182,10 +183,10 @@ pipeline {
             steps {
                 script {
                     def uploads = [
-                        [file: 'trufflehog-report.json', scanType: 'Trufflehog Scan'],
-                        [file: 'grype-report.json',      scanType: 'Anchore Grype'],
-                        [file: 'trivy-report.json',      scanType: 'Trivy Scan'],
-                        [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
+                        [file: 'trufflehog-report.json',         scanType: 'Trufflehog Scan'],
+                        [file: 'grype-report.json',              scanType: 'Anchore Grype'],
+                        [file: 'trivy-report.json',              scanType: 'Trivy Scan'],
+                        [file: 'sonarqube-scan-report.json',     scanType: 'SonarQube Scan']
                     ]
 
                     uploads.each { u ->
@@ -193,11 +194,13 @@ pipeline {
                             echo "📤 Processing ${u.file} for DefectDojo..."
 
                             withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
+
+                                // Cek apakah sudah ada Test untuk scanType ini di engagement dynamic
                                 def scanExists = sh(
-                                     script: """
+                                    script: """
                                         curl -s -G "${DD_URL}/api/v2/tests/" \
                                           -H "Authorization: Token ${DD_API_KEY}" \
-                                          --data-urlencode "engagement__name=${DD_ENGAGEMENT}" \
+                                          --data-urlencode "engagement__name=${env.engagement_name}" \
                                           --data-urlencode "scan_type=${u.scanType}" \
                                           | jq '.count'
                                     """,
@@ -205,31 +208,42 @@ pipeline {
                                 ).trim()
 
                                 if (scanExists != "0") {
-                                    echo "🔄 Reimport scan for ${u.scanType}"
-                                    sh """curl -X POST "${DD_URL}/api/v2/reimport-scan/" \
+                                    echo "🔄 Reimport scan for ${u.scanType} -> ${env.engagement_name}"
+                                    sh """
+                                        curl -sS -X POST "${DD_URL}/api/v2/reimport-scan/" \
                                           -H "Authorization: Token ${DD_API_KEY}" \
                                           -F "product_name=${DD_PRODUCT_NAME}" \
-                                          -F "engagement_name=${DD_ENGAGEMENT}" \
+                                          -F "engagement_name=${env.engagement_name}" \
                                           -F "scan_type=${u.scanType}" \
                                           -F "file=@${u.file}" \
                                           -F "build_id=${env.BUILD_NUMBER}" \
                                           -F "commit_hash=${env.COMMIT_HASH}" \
-                                          -F "branch_tag=${BRANCH_TAG}" \
+                                          -F "branch_tag=${env.branch_name}" \
                                           -F "source_code_management_uri=${SOURCE_CODE_URL}" \
                                           -F "version=build-${env.BUILD_NUMBER}" \
                                           -F "active=true" \
                                           -F "verified=true" \
                                           -F "do_not_reactivate=false" \
-                                          -F "close_old_findings=true"
+                                          -F "close_old_findings=true" \
+                                          -F "auto_create_context=true"
                                     """
                                 } else {
+                                    // Upload via plugin, auto-create engagement dengan nama dynamic (override global settings)
                                     defectDojoPublisher(
-                                    artifact: u.file,
-                                    productName: "${DD_PRODUCT_NAME}",
-                                    scanType: "${u.scanType}",
-                                    engagementName: "${DD_ENGAGEMENT}",
-                                    defectDojoCredentialsId: 'defectdojo-api-key',
-                                    sourceCodeUrl: "${SOURCE_CODE_URL}"
+                                        artifact: u.file,
+                                        productName: "${DD_PRODUCT_NAME}",
+                                        scanType: "${u.scanType}",
+                                        engagementName: "${env.engagement_name}",
+                                        branchTag: "${env.branch_name}",
+                                        commitHash: "${env.COMMIT_HASH}",
+                                        sourceCodeUrl: "${SOURCE_CODE_URL}",
+                                        // override agar URL & API key & auto-create dipakai dari sini
+                                        overrideGlobals: true,
+                                        defectDojoUrl: "${DD_URL}",
+                                        defectDojoCredentialsId: 'defectdojo-api-key',
+                                        autoCreateProducts: false,
+                                        autoCreateEngagements: true,
+                                        defectDojoReuploadScan: false   // first upload
                                     )
                                 }
                             }
@@ -243,11 +257,11 @@ pipeline {
     }
     
     post {
-         always {
+        always {
             echo "Pipeline selesai."
-          }
+        }
         failure {
-             echo "Pipeline gagal."
-       }
+            echo "Pipeline gagal."
+        }
     }
 }
