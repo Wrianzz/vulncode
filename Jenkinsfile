@@ -190,8 +190,15 @@ pipeline {
                         ]
             
                         withCredentials([string(credentialsId: 'defectdojo-api-key', variable: 'DD_API_KEY')]) {
-                        
-                    // Cek apakah engagement sudah ada (berdasarkan nama & product)
+
+                        def VERIFIED_POLICY = [
+                            'Trufflehog Scan': true,
+                            'Anchore Grype'  : false,
+                            'Trivy Scan'     : false,
+                            'SonarQube Scan' : false
+                            ]
+
+                        // Cek apakah engagement sudah ada (berdasarkan nama & product)
                         def engagementCount = sh(
                             script: """
                             curl -s -G "${DD_URL}/api/v2/engagements/" \
@@ -207,7 +214,7 @@ pipeline {
                         def dateFields = ""
                         if (engagementCount == "0") {
                             def startDate = java.time.LocalDate.now().toString()
-                            def endDate   = java.time.LocalDate.now().plusDays(30).toString()
+                            def endDate   = java.time.LocalDate.now().plusDays(180).toString()
                             dateFields = "-F engagement_start_date=${startDate} -F engagement_end_date=${endDate}"
                             echo "🆕 First-time engagement '${env.engagement_name}' → set dates ${startDate}..${endDate}"
                         } else {
@@ -216,6 +223,7 @@ pipeline {
             
                         uploads.each { u ->
                             if (fileExists(u.file)) {
+                                def verifiedFlag = VERIFIED_POLICY.get(u.scanType, false) ? "true" : "false"
                                 echo "📤 Processing ${u.file} for DefectDojo..."
                                 sh """
                                     curl -sS -X POST "${DD_URL}/api/v2/reimport-scan/" \
@@ -230,7 +238,7 @@ pipeline {
                                         -F "source_code_management_uri=${SOURCE_CODE_URL}" \
                                         -F "version=build-${env.BUILD_NUMBER}" \
                                         -F "active=true" \
-                                        -F "verified=true" \
+                                        -F "verified=${verifiedFlag}" \
                                         -F "do_not_reactivate=false" \
                                         -F "close_old_findings=true" \
                                         -F "auto_create_context=true" \
