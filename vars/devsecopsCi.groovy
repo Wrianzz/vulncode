@@ -1,46 +1,18 @@
 #!/usr/bin/env groovy
-
-def call(Map cfg = [:]) {
-  // ===== Config (with sensible defaults) =====
-  def gitUrl            = cfg.gitUrl ?: 'https://github.com/Wrianzz/vulncode.git'
-  def dd                = cfg.dd ?: [:]
-  def ddProduct         = dd.productName    ?: 'DevSecOps'
-  def ddEngagementHint  = dd.engagementName ?: 'Vulnerable-Code'
-  def ddUrl             = dd.url            ?: 'http://localhost:8280'
-  def ddCredsId         = dd.credsId        ?: 'defectdojo-api-key'
-  def sourceCodeUrl     = dd.sourceCodeUrl  ?: gitUrl
-
-  def dockerCfg         = cfg.docker ?: [:]
-  def imageNameBase     = dockerCfg.imageNameBase ?: 'my-app'
-
-  def sonar             = cfg.sonar ?: [:]
-  def sonarProjectKey   = sonar.projectKey   ?: 'project-key'
-  def sonarHostUrl      = sonar.hostUrl      ?: 'http://localhost:9000'
-  def sonarScannerTool  = sonar.scannerTool  ?: 'sonarqube'
-  def sonarTokenCredsId = sonar.tokenCredsId ?: 'sonarqube-token'
-
-  def mainBranches      = (cfg.mainBranches ?: ['master','main','production']) as List
-  def verifiedPolicy    = cfg.verifiedPolicy ?: [
-    'Trufflehog Scan': true,
-    'Anchore Grype'  : false,
-    'Trivy Scan'     : false,
-    'SonarQube Scan' : false
-  ]
-
   pipeline {
     agent any
 
     environment {
-      gitUrl               = "${gitUrl}"
-      DD_PRODUCT_NAME      = "${ddProduct}"
-      DD_ENGAGEMENT_HINT   = "${ddEngagementHint}"
-      SOURCE_CODE_URL      = "${sourceCodeUrl}"
-      DD_URL               = "${ddUrl}"
-      IMAGE_NAME_BASE      = "${imageNameBase}"
+      gitUrl               = "https://github.com/Wrianzz/vulncode.git"
+      DD_PRODUCT_NAME      = "DevSecOps"
+      DD_ENGAGEMENT_HINT   = "Vulnerable-Code"
+      SOURCE_CODE_URL      = "https://github.com/Wrianzz/vulncode.git"
+      DD_URL               = "http://192.168.88.20:8280"
+      IMAGE_NAME_BASE      = "my-app"
 
-      SONAR_PROJECT_KEY    = "${sonarProjectKey}"
-      SONAR_HOST_URL       = "${sonarHostUrl}"
-      SONAR_SCANNER        = tool "${sonarScannerTool}"
+      SONAR_PROJECT_KEY    = "vulnerable-code"
+      SONAR_HOST_URL       = "http://192.168.88.20:9000"
+      SONAR_SCANNER        = tool "sonarqube"
     }
 
     parameters {
@@ -200,6 +172,13 @@ def call(Map cfg = [:]) {
               [file: 'sonarqube-scan-report.json', scanType: 'SonarQube Scan']
             ]
 
+            def verifiedPolicy = [
+                'Trufflehog Scan': true,
+                'Anchore Grype'  : false,
+                'Trivy Scan'     : false,
+                'SonarQube Scan' : false
+            ]
+
             withCredentials([string(credentialsId: ddCredsId, variable: 'DD_API_KEY')]) {
               // Check if engagement exists for product+name
               def engagementCount = sh(
@@ -223,7 +202,7 @@ def call(Map cfg = [:]) {
 
               uploads.each { u ->
                 if (fileExists(u.file)) {
-                  def verifiedFlag = verifiedPolicy.get(u.scanType, false) ? 'true' : 'false'
+                  def verifiedFlag = .get(u.scanType, false) ? 'true' : 'false'
                   echo "📤 Reimport ${u.file} → DefectDojo (${u.scanType})"
                   sh """
                     curl -sS -X POST "${DD_URL}/api/v2/reimport-scan/" \
