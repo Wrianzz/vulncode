@@ -6,4 +6,4 @@ def lib = library(
   ])
 )
 
-devsecopsCi()
+devsecopsCi([])
