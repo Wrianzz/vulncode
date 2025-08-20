@@ -5,3 +5,5 @@ def lib = library(
     remote: 'https://github.com/Wrianzz/devsecops-lib.git', 
   ])
 )
+
+devsecopsCi()
